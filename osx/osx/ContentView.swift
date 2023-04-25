@@ -15,16 +15,30 @@ import MultipeerConnectivity
 struct ContentView: View {
     @StateObject private var mutipeerSession = MultipeerSession()
     @State private var path: [String] = []
+    @State private var text = ""
     var body: some View {
         NavigationStack(path: $path) {
-            List(mutipeerSession.connectedPeers, id: \.self) { peer in
-                Text(peer.displayName)
+            VStack {
+                List(mutipeerSession.connectedPeers, id: \.self) { peer in
+                    Text(peer.displayName)
+                }
+                HStack {
+                    TextEditor(text: $text)
+                    Button("Send") {
+                        if let data = "Hello".data(using: .utf8) {
+                            mutipeerSession.sendData(data, toPeers: mutipeerSession.connectedPeers)
+                        }
+                        
+                    }
+                }
             }
+            
+            
         }.onAppear {
-            mutipeerSession.setupSession()
+            
         }
         .onDisappear() {
-            mutipeerSession.endSession()
+            
         }
     }
 }
@@ -37,17 +51,22 @@ struct ContentView_Previews: PreviewProvider {
 
 
 class MultipeerSession: NSObject, MCSessionDelegate, ObservableObject {
-    private let myPeerID: MCPeerID = MCPeerID(displayName: Host.current().className)
-    private let serviceType: String = "my-service-type"
-    private var session: MCSession
-    private var advertiser: MCNearbyServiceAdvertiser?
-    private var browser: MCNearbyServiceBrowser?
+    private let myPeerID: MCPeerID
+    private let serviceType: String = "my-service"
+    private let session: MCSession
+    private let advertiser: MCNearbyServiceAdvertiser
+    private let browser: MCNearbyServiceBrowser
     @Published var connectedPeers: [MCPeerID] = []
     
     override init() {
+        myPeerID = MCPeerID(displayName: Host.className())
         session = MCSession(peer: myPeerID, securityIdentity: nil, encryptionPreference: .required)
+        browser = MCNearbyServiceBrowser(peer: myPeerID, serviceType: "my-service")
+        advertiser = MCNearbyServiceAdvertiser(peer: myPeerID, discoveryInfo: nil, serviceType: "my-service")
         super.init()
         session.delegate = self
+        advertiser.delegate = self
+        browser.delegate = self
     }
     func session(_ session: MCSession, peer peerID: MCPeerID, didChange state: MCSessionState) {
          DispatchQueue.main.async { [weak self] in
@@ -88,23 +107,7 @@ class MultipeerSession: NSObject, MCSessionDelegate, ObservableObject {
          // Not used in this example
      }
     
-    func setupSession() {
-        advertiser = MCNearbyServiceAdvertiser(peer: myPeerID, discoveryInfo: nil, serviceType: serviceType)
-        advertiser?.delegate = self
-        advertiser?.startAdvertisingPeer()
-        
-        browser = MCNearbyServiceBrowser(peer: myPeerID, serviceType: serviceType)
-    }
-    
-    func endSession() {
-        advertiser?.stopAdvertisingPeer()
-        advertiser = nil
-        
-        browser?.stopBrowsingForPeers()
-        browser = nil
-        
-        session.disconnect()
-    }
+
     
     func sendData(_ data: Data, toPeers peers:[MCPeerID]) {
         guard !peers.isEmpty else { return }
